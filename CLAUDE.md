@@ -33,6 +33,15 @@ image-to-knowledge/
 │   ├── batch.py                 # Folder/batch processing logic
 │   ├── templates.py             # Output markdown templates and formatting rules
 │   └── config.py                # Configuration and defaults
+├── tests/
+│   ├── conftest.py              # Shared fixtures and mock data
+│   ├── test_config.py           # Config/utility unit tests
+│   ├── test_extractor.py        # Extraction unit tests (mocked API)
+│   ├── test_structurer.py       # Structuring unit tests (mocked API)
+│   ├── test_processor.py        # Pipeline orchestration tests
+│   ├── test_batch.py            # Batch processing tests
+│   ├── test_cli.py              # CLI entry point tests
+│   └── test_regression.py       # End-to-end regression tests
 ├── output/                      # Default output directory
 ├── examples/                    # Example inputs and outputs for reference
 │   ├── input/
@@ -76,7 +85,47 @@ python convert.py /path/to/folder/ --output-dir ./docs/
 python convert.py /path/to/folder/ --dry-run --verbose
 ```
 
+## Testing
+
+### Requirements
+
+- **Every function must have tests.** All public functions in `src/` and `convert.py` must have corresponding unit tests. No function should exist without test coverage.
+- **Every change must include tests.** Any code change — new feature, bug fix, refactor — must be accompanied by new or updated tests that cover the change. Do not merge or commit code without passing tests.
+- **Run tests before committing.** Always run `python3 -m pytest tests/ -v` and confirm all tests pass before committing changes.
+- **Mock external APIs.** Tests must never make real API calls. Use `unittest.mock.patch` to mock `anthropic.Anthropic` in extractor and structurer tests.
+- **Regression tests protect output stability.** The `test_regression.py` suite verifies that output format (frontmatter structure, filename slugification, index generation) remains stable across changes. Add regression test cases when output behavior changes intentionally.
+
+### Test Structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures (tmp images, mock data, mock clients)
+├── test_config.py        # is_supported_image, slugify_filename, get_output_path, DEFAULT_CONFIG
+├── test_extractor.py     # extract_from_image (mocked API calls, retries, error handling)
+├── test_structurer.py    # structure_extraction, _build_frontmatter, _extract_field
+├── test_processor.py     # ProcessingResult, process_image (pipeline orchestration)
+├── test_batch.py         # find_images, process_batch, _write_index
+├── test_cli.py           # CLI entry point (click runner, flag passing, exit codes)
+└── test_regression.py    # End-to-end pipeline, output format stability, slug stability
+```
+
+### Running Tests
+
+```bash
+# All tests
+python3 -m pytest tests/ -v
+
+# Single module
+python3 -m pytest tests/test_config.py -v
+
+# Single test
+python3 -m pytest tests/test_config.py::TestSlugifyFilename::test_basic_slugify -v
+```
+
+---
+
 ## Dependencies
 - anthropic >= 0.40.0
 - click >= 8.0
+- pytest >= 7.0
 - Python 3.9+
