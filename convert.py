@@ -32,7 +32,9 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 @click.option("--skip-existing", is_flag=True, help="Skip images that already have output files.")
 @click.option("--model", default=None, help="Claude model to use (default: claude-sonnet-4-20250514).")
 @click.option("--no-frontmatter", is_flag=True, help="Omit YAML frontmatter from output.")
-def main(input_path, output_name, output_dir, recursive, dry_run, verbose, concurrency, skip_existing, model, no_frontmatter):
+@click.option("--no-sanitize", is_flag=True, help="Skip image sanitization (not recommended).")
+@click.option("--force", is_flag=True, help="Proceed even when validation flags suspicious patterns.")
+def main(input_path, output_name, output_dir, recursive, dry_run, verbose, concurrency, skip_existing, model, no_frontmatter, no_sanitize, force):
     """Convert images to structured knowledge documents.
 
     INPUT_PATH can be a single image file or a folder of images.
@@ -55,14 +57,22 @@ def main(input_path, output_name, output_dir, recursive, dry_run, verbose, concu
             include_frontmatter=include_frontmatter,
             dry_run=dry_run,
             verbose=verbose,
+            skip_sanitize=no_sanitize,
+            force_on_warning=force,
         )
         if result.success:
             if dry_run:
                 click.echo(f"[DRY RUN] Would create: {result.output_path}")
             else:
                 click.echo(f"Created: {result.output_path}")
+                if result.sanitize_summary:
+                    click.echo(f"  Sanitize: {result.sanitize_summary}")
+                if result.validation_report and "CLEAN" not in result.validation_report:
+                    click.echo(f"  {result.validation_report}")
         else:
             click.echo(f"Failed: {result.error}", err=True)
+            if result.validation_report:
+                click.echo(result.validation_report, err=True)
             sys.exit(1)
 
     elif input_path.is_dir():

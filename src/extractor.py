@@ -1,4 +1,4 @@
-"""Image → raw text extraction via Claude Vision API."""
+"""Image -> raw text extraction via Claude Vision API."""
 
 import base64
 import logging
@@ -16,33 +16,43 @@ MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2  # seconds
 
 
-def extract_from_image(image_path: Path, model: str = None) -> str:
+def extract_from_image(image_path: Path, model: str = None, sanitized_bytes: bytes = None) -> str:
     """Send an image to Claude Vision API and extract all text/structure.
 
     Args:
-        image_path: Path to the image file.
+        image_path: Path to the image file (used for logging and format detection
+                    when sanitized_bytes is not provided).
         model: Claude model to use. Defaults to config value.
+        sanitized_bytes: Pre-sanitized PNG bytes to use instead of reading from
+                        disk. When provided, the original file is NOT read --
+                        only the clean bytes are sent to the API.
 
     Returns:
         Raw extracted text with structural annotations.
 
     Raises:
-        FileNotFoundError: If image_path doesn't exist.
+        FileNotFoundError: If image_path doesn't exist and no sanitized_bytes.
         ValueError: If image format is unsupported.
         anthropic.APIError: If API call fails after retries.
     """
-    if not image_path.exists():
-        raise FileNotFoundError(f"Image not found: {image_path}")
+    if sanitized_bytes is not None:
+        # Use pre-sanitized bytes -- always PNG after sanitization
+        image_data = base64.standard_b64encode(sanitized_bytes).decode("utf-8")
+        media_type = "image/png"
+        logger.info(f"Using sanitized bytes for {image_path.name}")
+    else:
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
 
-    suffix = image_path.suffix.lower()
-    media_type = MEDIA_TYPES.get(suffix)
-    if not media_type:
-        raise ValueError(f"Unsupported image format: {suffix}")
+        suffix = image_path.suffix.lower()
+        media_type = MEDIA_TYPES.get(suffix)
+        if not media_type:
+            raise ValueError(f"Unsupported image format: {suffix}")
+
+        with open(image_path, "rb") as f:
+            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
 
     model = model or DEFAULT_CONFIG["model"]
-
-    with open(image_path, "rb") as f:
-        image_data = base64.standard_b64encode(f.read()).decode("utf-8")
 
     client = anthropic.Anthropic()
 

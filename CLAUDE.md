@@ -22,13 +22,15 @@ Convert visual knowledge artifacts (infographics, architecture diagrams, flowcha
 
 ```
 image-to-knowledge/
-├── CLAUDE.md                    # This file — system prompt and project spec
+├── CLAUDE.md                    # This file -- system prompt and project spec
 ├── README.md                    # User-facing documentation
 ├── convert.py                   # Main CLI entry point
 ├── src/
 │   ├── __init__.py
-│   ├── extractor.py             # Image → raw text extraction via Claude Vision API
-│   ├── structurer.py            # Raw extraction → structured markdown via Claude API
+│   ├── sanitize.py              # Image sanitization -- strips metadata, flattens alpha
+│   ├── extractor.py             # Image -> raw text extraction via Claude Vision API
+│   ├── validator.py             # Post-extraction prompt injection detection
+│   ├── structurer.py            # Raw extraction -> structured markdown via Claude API
 │   ├── processor.py             # Orchestrates single-image pipeline
 │   ├── batch.py                 # Folder/batch processing logic
 │   ├── templates.py             # Output markdown templates and formatting rules
@@ -36,7 +38,9 @@ image-to-knowledge/
 ├── tests/
 │   ├── conftest.py              # Shared fixtures and mock data
 │   ├── test_config.py           # Config/utility unit tests
+│   ├── test_sanitize.py         # Image sanitization tests
 │   ├── test_extractor.py        # Extraction unit tests (mocked API)
+│   ├── test_validator.py        # Injection detection tests
 │   ├── test_structurer.py       # Structuring unit tests (mocked API)
 │   ├── test_processor.py        # Pipeline orchestration tests
 │   ├── test_batch.py            # Batch processing tests
@@ -53,22 +57,54 @@ image-to-knowledge/
 
 ## Processing Pipeline
 
+### Step 0: Image Sanitization (sanitize.py) -- SECURITY
+- **Original image is preserved** -- never modified
+- Strip all metadata: EXIF, IPTC, XMP, ICC profiles, PNG text chunks, JPEG comments, GIF comment extensions
+- Flatten suspicious alpha channels (unique values > threshold) to prevent hidden text layers
+- Re-encode from raw pixel data as clean PNG -- no metadata carries over
+- Output: sanitized bytes in memory (no temp files by default)
+- Can be skipped with `--no-sanitize` (not recommended)
+
 ### Step 1: Image Intake
 - Validate file exists and is a supported image format
 - For folders: enumerate all image files, optionally recursive
 - Generate output filename from input filename (slugified, lowercase, hyphens)
 
 ### Step 2: Vision Extraction (extractor.py)
-- Send image to Claude Vision API with extraction prompt
+- Send **sanitized image bytes** (not raw file) to Claude Vision API
+- Extraction prompt includes untrusted-input guardrails instructing the model to treat image content as DATA, not INSTRUCTIONS
 - Extract ALL text, relationships, structure, attribution
 
-### Step 3: Structured Formatting (structurer.py)
+### Step 3: Post-Extraction Validation (validator.py) -- SECURITY
+- Scan extracted text for prompt injection indicators:
+  - Role override attempts ("you are", "act as", "pretend to be")
+  - Instruction manipulation ("ignore previous", "new instructions", "disregard")
+  - System prompt references
+  - Output control attempts
+  - Encoded payloads (base64, hex)
+  - Data exfiltration patterns
+- False positive reduction: contextual filtering for security infographics, AI tutorials, leadership content
+- Severity levels: low (noted), medium/high (blocks processing unless `--force`)
+- Flagged extractions halt the pipeline and report findings for manual review
+
+### Step 4: Structured Formatting (structurer.py)
 - Convert raw extraction to clean structured markdown
 - Apply appropriate formatting based on content type
+- **Receives text only** -- never sees the original image, so visual injection is severed
 
-### Step 4: Output
+### Step 5: Output
 - Write markdown with optional YAML frontmatter
 - Generate batch index when processing folders
+
+### Security Pipeline Summary
+```
+Original Image (preserved)
+  --> sanitize.py (strip metadata, flatten alpha, re-encode as clean PNG)
+  --> extractor.py (untrusted-input prompt, sanitized bytes only, no tools)
+  --> validator.py (scan for injection patterns, block on medium/high)
+  --> structurer.py (text-only input, no image access)
+  --> output .md
+```
 
 ---
 
@@ -127,5 +163,6 @@ python3 -m pytest tests/test_config.py::TestSlugifyFilename::test_basic_slugify 
 ## Dependencies
 - anthropic >= 0.40.0
 - click >= 8.0
+- Pillow >= 10.0
 - pytest >= 7.0
 - Python 3.9+

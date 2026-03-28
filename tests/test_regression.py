@@ -1,9 +1,10 @@
-"""Regression tests — end-to-end pipeline behavior with mocked API responses.
+"""Regression tests -- end-to-end pipeline behavior with mocked API responses.
 
 These tests verify that the full pipeline produces stable, well-formed output
 and catches regressions in output format, frontmatter structure, and file handling.
 """
 
+import io
 import pytest
 from pathlib import Path
 from datetime import date
@@ -12,6 +13,7 @@ from unittest.mock import patch, MagicMock
 from src.processor import process_image
 from src.batch import process_batch
 from src.config import slugify_filename
+from src.sanitize import SanitizeResult
 
 
 MOCK_EXTRACTION = """\
@@ -45,7 +47,7 @@ SECTIONS:
 ## Monitor
 - Collect metrics, logs, and alerts
 
-RELATIONSHIPS: Sequential cycle — Monitor feeds back into Plan.
+RELATIONSHIPS: Sequential cycle -- Monitor feeds back into Plan.
 VISUAL STRUCTURE: Circular flow (infinity loop / figure-8)."""
 
 MOCK_STRUCTURED = """\
@@ -87,7 +89,7 @@ MOCK_STRUCTURED = """\
 
 - Collect metrics, logs, and alerts
 
-> Note: This is a continuous cycle — Monitor feeds back into Plan.
+> Note: This is a continuous cycle -- Monitor feeds back into Plan.
 
 ## Quick Reference
 
@@ -104,10 +106,19 @@ MOCK_STRUCTURED = """\
 
 ## Usage Notes
 
-- The cycle is continuous — each phase feeds into the next.
+- The cycle is continuous -- each phase feeds into the next.
 - Automation is key to reducing cycle time across all 8 phases.
 
 *Original process diagram by Platform Engineering Weekly*"""
+
+
+def _mock_sanitize_ok(input_path, **kwargs):
+    """Return a successful sanitize result with minimal clean PNG bytes."""
+    from PIL import Image
+    img = Image.new("RGB", (1, 1), (255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue(), SanitizeResult(original_path=input_path)
 
 
 def _mock_anthropic_for_pipeline():
@@ -133,10 +144,11 @@ def _mock_anthropic_for_pipeline():
 class TestEndToEndPipeline:
     """Full pipeline regression tests with mocked API."""
 
+    @patch("src.processor.sanitize_to_bytes", side_effect=_mock_sanitize_ok)
     @patch("src.processor.structure_extraction")
     @patch("src.processor.extract_from_image")
     def test_single_image_produces_valid_markdown(
-        self, mock_extract, mock_structure, tmp_image, tmp_path
+        self, mock_extract, mock_structure, mock_sanitize, tmp_image, tmp_path
     ):
         mock_extract.return_value = MOCK_EXTRACTION
 
@@ -169,10 +181,11 @@ class TestEndToEndPipeline:
         assert "Quick Reference" in content
         assert "Usage Notes" in content
 
+    @patch("src.processor.sanitize_to_bytes", side_effect=_mock_sanitize_ok)
     @patch("src.processor.structure_extraction")
     @patch("src.processor.extract_from_image")
     def test_output_filename_is_slugified(
-        self, mock_extract, mock_structure, tmp_path
+        self, mock_extract, mock_structure, mock_sanitize, tmp_path
     ):
         img = tmp_path / "My DevOps_Lifecycle (v2).png"
         img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
@@ -186,10 +199,11 @@ class TestEndToEndPipeline:
         assert result.success is True
         assert result.output_path.name == "my-devops-lifecycle-v2.md"
 
+    @patch("src.processor.sanitize_to_bytes", side_effect=_mock_sanitize_ok)
     @patch("src.processor.structure_extraction")
     @patch("src.processor.extract_from_image")
     def test_no_frontmatter_option(
-        self, mock_extract, mock_structure, tmp_image, tmp_path
+        self, mock_extract, mock_structure, mock_sanitize, tmp_image, tmp_path
     ):
         mock_extract.return_value = MOCK_EXTRACTION
         mock_structure.return_value = MOCK_STRUCTURED
@@ -270,5 +284,5 @@ class TestSlugifyRegression:
         ("123.gif", "123"),
     ])
     def test_slugify_stability(self, input_name, expected_slug):
-        """These slugs must not change — output filenames depend on them."""
+        """These slugs must not change -- output filenames depend on them."""
         assert slugify_filename(input_name) == expected_slug
