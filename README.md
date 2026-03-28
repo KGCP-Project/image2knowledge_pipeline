@@ -1,3 +1,9 @@
+---
+title: "Image-to-Knowledge Document Converter"
+scope: "User-facing documentation for CLI tool setup, usage, and output format"
+last_updated: 2026-03-27
+---
+
 # Image-to-Knowledge Document Converter
 
 A CLI tool that converts text-heavy images — infographics, diagrams, framework charts, slides, screenshots — into structured markdown documents using the Claude Vision API.

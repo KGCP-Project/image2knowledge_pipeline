@@ -1,3 +1,9 @@
+---
+title: "CLAUDE.md -- Image-to-Knowledge Document Converter"
+scope: "System prompt, architecture, pipeline spec, and development standards"
+last_updated: 2026-03-27
+---
+
 # CLAUDE.md — Image-to-Knowledge Document Converter
 
 > A CLI tool that converts infographic images into structured, AI-consumable knowledge documents (markdown). Designed as a standalone utility and future ingestion module for the Knowledge Graph Context Pipeline (KGCP).
